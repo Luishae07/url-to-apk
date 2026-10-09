@@ -1,0 +1,25 @@
+name: Build an Android app
+description: Turn a website into an Android app (an .apk file)
+title: "Build: "
+body:
+  - type: input
+    id: url
+    attributes:
+      label: Website address
+      placeholder: https://example.com
+    validations:
+      required: true
+  - type: input
+    id: name
+    attributes:
+      label: App name (optional)
+      description: If you leave this empty, the name of the website is used.
+  - type: dropdown
+    id: location
+    attributes:
+      label: Should the app be allowed to ask for the phone's location?
+      options:
+        - "No"
+        - "Yes"
+    validations:
+      required: true
