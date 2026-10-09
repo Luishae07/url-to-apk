@@ -1,0 +1,77 @@
+name: Build an APK
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Website address (https://...)
+        required: true
+      name:
+        description: App name (optional)
+        required: false
+      location:
+        description: Allow the app to ask for the phone's location?
+        type: boolean
+        default: false
+  repository_dispatch:
+    types: [build-apk]
+  issues:
+    types: [opened]
+permissions:
+  contents: write
+  issues: write
+concurrency:
+  group: build-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.event_name != 'issues' || startsWith(github.event.issue.title, 'Build:')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pillow
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Prepare the app
+        env:
+          INPUT_URL: ${{ github.event.inputs.url }}
+          INPUT_NAME: ${{ github.event.inputs.name }}
+          INPUT_LOCATION: ${{ github.event.inputs.location }}
+        run: python3 tools/prepare.py
+      - name: Accept the Android SDK licences
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+      - name: Build the APK
+        run: cd build/project && gradle --no-daemon assembleRelease
+      - name: Publish it
+        run: |
+          cp build/project/app/build/outputs/apk/release/app-release.apk "$APK_SLUG.apk"
+          ls -la "$APK_SLUG.apk"
+          gh release create "$TAG" "$APK_SLUG.apk" --title "$APP_NAME" \
+            --notes "Android app for $SITE_URL. To install: download the .apk on your phone, open it, and allow installing from this source when Android asks."
+          URL="https://github.com/${{ github.repository }}/releases/download/$TAG/$APK_SLUG.apk"
+          echo "APK_URL=$URL" >> "$GITHUB_ENV"
+          if [ -n "$ISSUE_NUMBER" ]; then
+            gh issue comment "$ISSUE_NUMBER" --body "Your app is ready: [$APK_SLUG.apk]($URL)
+
+          Open the link on your Android phone, then allow installing from this source when asked."
+            gh issue close "$ISSUE_NUMBER" --reason completed
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: "*.apk"
+      - name: Tell the issue that it failed
+        if: failure() && github.event_name == 'issues'
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" --body "BUILD FAILED. The log is here: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh issue close "${{ github.event.issue.number }}" --reason "not planned"
