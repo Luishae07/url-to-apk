@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>URL to APK - turn any website into an Android app</title>
+<meta name="description" content="Paste a website address and get an Android app (.apk), built for free by GitHub Actions.">
+<style>
+:root{--bg:#0e1628;--card:#17203a;--line:#2a3558;--text:#ecf0ff;--dim:#9aa1c2;--accent:#7c8cff;--good:#34d399;--bad:#f87171;--code:#0a1020}
+@media (prefers-color-scheme: light){:root{--bg:#f4f6fc;--card:#fff;--line:#d9deef;--text:#151a2e;--dim:#5b6384;--accent:#4f5fe0;--good:#0f9d6b;--bad:#d64545;--code:#eef1fb}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:720px;margin:0 auto;padding:40px 18px 80px}
+h1{font-size:clamp(30px,6vw,46px);line-height:1.08;margin:0 0 10px}
+h2{font-size:21px;margin:38px 0 8px}
+.lead{font-size:19px;color:var(--dim);margin:0 0 24px}
+a{color:var(--accent)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;margin:14px 0}
+label{display:block;font-weight:600;margin:14px 0 6px}label:first-child{margin-top:0}
+input[type=text],input[type=url]{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--code);color:var(--text);font:inherit}
+.check{display:flex;gap:10px;align-items:center;font-weight:400;margin-top:14px}
+.check input{width:18px;height:18px}
+button.go{margin-top:18px;width:100%;padding:14px;border:0;border-radius:12px;background:var(--accent);color:#0b1020;font:700 18px system-ui;cursor:pointer}
+button.go:disabled{opacity:.5;cursor:default}
+.dim{color:var(--dim)}.small{font-size:14px}
+#status{display:none}
+.step{display:flex;gap:10px;align-items:flex-start;padding:6px 0}.step .dot{width:12px;height:12px;border-radius:50%;margin-top:7px;flex:none;background:var(--line)}
+.step.on .dot{background:var(--accent);animation:p 1s infinite}.step.done .dot{background:var(--good)}.step.bad .dot{background:var(--bad)}
+@keyframes p{50%{opacity:.35}}
+.dl{display:block;margin-top:14px;padding:16px;border-radius:12px;background:var(--good);color:#06281c;text-align:center;font:700 19px system-ui;text-decoration:none}
+ol li,ul li{margin:6px 0}
+code{background:var(--code);padding:1px 6px;border-radius:5px;font-size:.92em}
+footer{margin-top:44px;color:var(--dim);font-size:14px}
+</style>
+</head>
+<body><main>
+<h1>Turn any website into an Android app</h1>
+<p class="lead">Paste an address, press the button, and get an <b>.apk</b> that opens the site full screen, with its own icon and colour. It is built for free by GitHub, with no sign-up for us.</p>
+
+<div class="card">
+  <label for="url">Website address</label>
+  <input id="url" type="url" inputmode="url" autocomplete="off" placeholder="https://example.com" autofocus>
+  <label for="name">App name <span class="dim">(optional)</span></label>
+  <input id="name" type="text" maxlength="30" placeholder="Leave empty to use the website's name">
+  <label class="check"><input id="loc" type="checkbox"> Let the app ask for the phone's location</label>
+  <button class="go" id="build">Build my app</button>
+  <p class="dim small" style="margin:12px 0 0">GitHub opens with the request filled in. Press <b>Submit new issue</b> there (you need a free GitHub account). This page then shows the progress and the download.</p>
+</div>
+
+<div class="card" id="status">
+  <div class="step" id="s1"><span class="dot"></span><span>Waiting for you to press <b>Submit new issue</b> on GitHub…</span></div>
+  <div class="step" id="s2"><span class="dot"></span><span>Building the app <span class="dim">(about 3 to 5 minutes)</span></span></div>
+  <div class="step" id="s3"><span class="dot"></span><span>Ready</span></div>
+  <div id="result"></div>
+</div>
+
+<h2>How to install it</h2>
+<ol>
+  <li>Open the download link on your Android phone.</li>
+  <li>Open the downloaded file. Android asks you to allow installing from this source, once.</li>
+  <li>Done. The app is on your home screen with the website's icon.</li>
+</ol>
+
+<h2>Good to know</h2>
+<ul>
+  <li>The app is a full-screen view of the website. Links to other websites open in your normal browser.</li>
+  <li>Only <b>https</b> websites work. It always shows the live website, so it is as up to date as the site.</li>
+  <li>The file is signed with a standard test key. It installs fine, but it is <b>not for the Play Store</b>, and an update built later may need the old app removed first.</li>
+  <li>Only make apps for websites you own or may use this way. Please don't make look-alikes of other people's sites.</li>
+</ul>
+
+<footer><a href="https://github.com/Luishae07/url-to-apk">Source code and how it works</a> · iPhone? See <a href="https://github.com/Luishae07/groundcheck/tree/main/ios">the iOS wrapper</a> for the same idea.</footer>
+</main>
+<script>
+const REPO = "Luishae07/url-to-apk";
+const $ = id => document.getElementById(id);
+let timer = null;
+
+function cleanUrl(v) {
+  v = (v || "").trim();
+  if (!v) return null;
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) v = "https://" + v;
+  try { const u = new URL(v); return u.hostname.includes(".") ? u : null; } catch (e) { return null; }
+}
+
+function step(id, cls) { $(id).className = "step " + cls; }
+
+$("build").addEventListener("click", () => {
+  const u = cleanUrl($("url").value);
+  if (!u) { $("url").focus(); $("url").style.borderColor = "var(--bad)"; return; }
+  $("url").style.borderColor = "";
+  const token = Math.random().toString(36).slice(2, 8);
+  const title = `Build: ${u.hostname} [${token}]`;
+  const q = new URLSearchParams({ template: "build.yml", title, url: u.origin + (u.pathname === "/" ? "" : u.pathname) + u.search,
+                                  name: $("name").value.trim(), location: $("loc").checked ? "Yes" : "No" });
+  window.open(`https://github.com/${REPO}/issues/new?${q}`, "_blank", "noopener");
+  $("status").style.display = "block";
+  $("result").innerHTML = "";
+  step("s1", "on"); step("s2", ""); step("s3", "");
+  clearInterval(timer);
+  let tries = 0;
+  timer = setInterval(() => poll(token, ++tries), 9000);
+  poll(token, 0);
+});
+
+async function poll(token, tries) {
+  if (tries > 120) { clearInterval(timer); $("result").innerHTML = '<p class="dim">Gave up waiting. Check <a href="https://github.com/' + REPO + '/issues?q=is%3Aissue">the issues</a>.</p>'; return; }
+  try {
+    const q = encodeURIComponent(`repo:${REPO} is:issue in:title ${token}`);
+    const r = await fetch(`https://api.github.com/search/issues?q=${q}`, { headers: { Accept: "application/vnd.github+json" } });
+    if (!r.ok) return;                       // rate limited or hiccup: try again at the next tick
+    const item = ((await r.json()).items || [])[0];
+    if (!item) return;
+    step("s1", "done");
+    if (item.state === "open") { step("s2", "on"); $("result").innerHTML = `<p class="dim small">Request: <a href="${item.html_url}" target="_blank" rel="noopener">${item.html_url}</a></p>`; return; }
+    clearInterval(timer);
+    const cr = await fetch(item.comments_url, { headers: { Accept: "application/vnd.github+json" } });
+    const comments = cr.ok ? await cr.json() : [];
+    const text = comments.map(c => c.body).join("\n");
+    const link = (text.match(/https:\/\/github\.com\/[^\s)]+\/releases\/download\/[^\s)]+\.apk/) || [])[0];
+    if (link && !/BUILD FAILED/.test(text)) {
+      step("s2", "done"); step("s3", "done");
+      $("result").innerHTML = `<a class="dl" href="${link}">Download the app (.apk)</a><p class="dim small" style="text-align:center">Open it on your Android phone.</p>`;
+    } else {
+      step("s2", "bad");
+      $("result").innerHTML = `<p style="color:var(--bad)"><b>The build failed.</b> <a href="${item.html_url}" target="_blank" rel="noopener">See why</a>. Common causes: the site blocks automatic visits, or the address is not a public https website.</p>`;
+    }
+  } catch (e) { /* network hiccup: next tick */ }
+}
+</script>
+</body></html>
